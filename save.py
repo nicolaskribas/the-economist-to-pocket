@@ -1,3 +1,5 @@
+import aiohttp
+import asyncio
 import calendar
 import feedparser
 import os
@@ -35,14 +37,23 @@ def published_since(time):
     return lambda article: calendar.timegm(article.published_parsed) >= time
 
 
-def get_new_articles(topic):
+async def fetch_rss(session, topic):
     feed_url = 'https://www.economist.com/' + topic + '/rss.xml'
-    parsed = feedparser.parse(feed_url)
 
-    one_day_ago = int(time.time()) - 24 * 60 * 60
-    articles = filter(published_since(one_day_ago), parsed.entries)
+    async with session.get(feed_url) as resp:
+        feed = await resp.text()
+        parsed = feedparser.parse(feed)
 
-    return articles, parsed.feed.title
+        one_day_ago = int(time.time()) - 24 * 60 * 60
+        articles = filter(published_since(one_day_ago), parsed.entries)
+
+        return parsed.feed.title, articles
+
+
+async def get_recent_articles():
+    async with aiohttp.ClientSession() as session:
+        articles = map(lambda topic: fetch_rss(session, topic), topics)
+        return await asyncio.gather(*articles)
 
 
 def get_saved_articles(pocket):
@@ -67,9 +78,7 @@ def main():
         print('Error querying Pocket about saved articles:', e)
         return
 
-    for topic in topics:
-        articles, topic_tag = get_new_articles(topic)
-
+    for topic_tag, articles in asyncio.run(get_recent_articles()):
         for article in articles:
             if article.link not in already_saved:
                 pocket.bulk_add(title=article.title, url=article.link,
