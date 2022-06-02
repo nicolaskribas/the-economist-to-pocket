@@ -20,6 +20,7 @@ topics = [
     'europe',
     'britain',
     'international',
+    'technology-quarterly',
     'special-report',
     'business',
     'finance-and-economics',
